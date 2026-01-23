@@ -1,0 +1,295 @@
+'use client'
+import { useState } from 'react';
+import { Plus, Search, Edit, Trash2, Package } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { PageHeader } from '@/components/ui/page-header';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { mockProducts } from '@/data/mockData';
+
+import { toast } from 'sonner';
+import { Product } from '@/types/type';
+
+const categories = ['Sodas', 'Eau', 'Jus', 'Bières', 'Vins', 'Énergisantes'];
+
+export default function StockComponent() {
+  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  const [formData, setFormData] = useState({
+    name: '',
+    category: '',
+    quantity: '',
+    unitPrice: '',
+    minStock: '',
+    unit: 'bouteilles',
+  });
+
+  const filteredProducts = products.filter(product => {
+    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (editingProduct) {
+      setProducts(products.map(p => 
+        p.id === editingProduct.id 
+          ? { ...p, ...formData, quantity: Number(formData.quantity), unitPrice: Number(formData.unitPrice), minStock: Number(formData.minStock) }
+          : p
+      ));
+      toast.success('Produit modifié avec succès');
+    } else {
+      const newProduct: Product = {
+        id: Date.now.toString(),
+        name: formData.name,
+        category: formData.category,
+        quantity: Number(formData.quantity),
+        unitPrice: Number(formData.unitPrice),
+        minStock: Number(formData.minStock),
+        unit: formData.unit,
+        createdAt: new Date(),
+      };
+      setProducts([...products, newProduct]);
+      toast.success('Produit ajouté avec succès');
+    }
+    
+    resetForm();
+    setIsDialogOpen(false);
+  };
+
+  const handleEdit = (product: Product) => {
+    setEditingProduct(product);
+    setFormData({
+      name: product.name,
+      category: product.category,
+      quantity: product.quantity.toString(),
+      unitPrice: product.unitPrice.toString(),
+      minStock: product.minStock.toString(),
+      unit: product.unit,
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    setProducts(products.filter(p => p.id !== id));
+    toast.success('Produit supprimé');
+  };
+
+  const resetForm = () => {
+    setFormData({ name: '', category: '', quantity: '', unitPrice: '', minStock: '', unit: 'bouteilles' });
+    setEditingProduct(null);
+  };
+
+  const getStockStatus = (product: Product) => {
+    if (product.quantity <= product.minStock * 0.5) return { label: 'Critique', variant: 'destructive' as const };
+    if (product.quantity <= product.minStock) return { label: 'Faible', variant: 'secondary' as const };
+    return { label: 'OK', variant: 'default' as const };
+  };
+
+  return (
+    <div className="animate-fade-in">
+      <PageHeader
+        title="Gestion du Stock"
+        description="Gérez vos produits et leur inventaire"
+        action={
+          <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) resetForm(); }}>
+            <DialogTrigger asChild>
+              <Button className="gap-2 bg-primary hover:bg-primary/90">
+                <Plus className="h-4 w-4" />
+                Nouveau produit
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>{editingProduct ? 'Modifier le produit' : 'Ajouter un produit'}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nom du produit</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Ex: Coca-Cola 33cl"
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="category">Catégorie</Label>
+                    <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sélectionner" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="unit">Unité</Label>
+                    <Select value={formData.unit} onValueChange={(value) => setFormData({ ...formData, unit: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bouteilles">Bouteilles</SelectItem>
+                        <SelectItem value="canettes">Canettes</SelectItem>
+                        <SelectItem value="cartons">Cartons</SelectItem>
+                        <SelectItem value="packs">Packs</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="quantity">Quantité</Label>
+                    <Input
+                      id="quantity"
+                      type="number"
+                      value={formData.quantity}
+                      onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="unitPrice">Prix unitaire</Label>
+                    <Input
+                      id="unitPrice"
+                      type="number"
+                      value={formData.unitPrice}
+                      onChange={(e) => setFormData({ ...formData, unitPrice: e.target.value })}
+                      placeholder="FCFA"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="minStock">Stock min.</Label>
+                    <Input
+                      id="minStock"
+                      type="number"
+                      value={formData.minStock}
+                      onChange={(e) => setFormData({ ...formData, minStock: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); resetForm(); }}>
+                    Annuler
+                  </Button>
+                  <Button type="submit">{editingProduct ? 'Enregistrer' : 'Ajouter'}</Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        }
+      />
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher un produit..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Catégorie" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes catégories</SelectItem>
+            {categories.map((cat) => (
+              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Products Table */}
+      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Produit</th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Catégorie</th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Quantité</th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Prix unitaire</th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Valeur stock</th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Statut</th>
+                <th className="px-6 py-4 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filteredProducts.map((product) => {
+                const status = getStockStatus(product);
+                return (
+                  <tr key={product.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                          <Package className="h-5 w-5 text-primary" />
+                        </div>
+                        <span className="font-medium text-foreground">{product.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">{product.category}</td>
+                    <td className="px-6 py-4 text-sm font-medium text-foreground">{product.quantity} {product.unit}</td>
+                    <td className="px-6 py-4 text-sm text-muted-foreground">{product.unitPrice.toLocaleString()} FCFA</td>
+                    <td className="px-6 py-4 text-sm font-medium text-foreground">{(product.quantity * product.unitPrice).toLocaleString()} FCFA</td>
+                    <td className="px-6 py-4">
+                      <Badge 
+                        variant={status.variant}
+                        className={status.label === 'OK' ? 'bg-success/20 text-success border-0' : status.label === 'Faible' ? 'bg-warning/20 text-warning border-0' : ''}
+                      >
+                        {status.label}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex justify-end gap-2">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={() => handleDelete(product.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
