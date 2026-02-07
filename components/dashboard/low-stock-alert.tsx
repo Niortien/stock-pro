@@ -35,12 +35,29 @@ export function LowStockAlert({ products }: LowStockAlertProps) {
         {lowStockProducts.map((product) => (
           <div key={product.id} className="flex items-center justify-between p-4 hover:bg-muted/20 transition-colors">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-destructive/10 flex items-center justify-center">
-                <AlertTriangle className="h-5 w-5 text-destructive "  />
+              <div className="relative">
+                <div className="h-10 w-10 rounded-lg bg-destructive/10 flex items-center justify-center">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
               </div>
               <div>
                 <p className="font-medium text-foreground">{product.name}</p>
-                <p className="text-sm text-muted-foreground">{product.category}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-muted-foreground">{product.category}</p>
+                  <div className="flex items-center gap-1">
+                    <div className={`w-2 h-2 rounded-full ${
+                      product.quantity === 0 ? 'bg-red-500' :
+                      product.quantity <= product.minStock * 0.5 ? 'bg-orange-500' :
+                      'bg-yellow-500'
+                    }`} />
+                    <span className="text-xs text-muted-foreground">
+                      {product.quantity === 0 ? 'Rupture' :
+                       product.quantity <= product.minStock * 0.5 ? 'Critique' :
+                       'Faible'}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="text-right">

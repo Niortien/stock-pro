@@ -1,18 +1,59 @@
 'use client'
+import { useState, useEffect } from 'react';
 import { Package, TrendingUp, ShoppingCart, CreditCard, AlertTriangle, FileText } from 'lucide-react';
 
 import { PageHeader } from '@/components/ui/page-header';
-import { mockProducts, mockSales, mockPurchases, mockCredits } from '@/data/mockData';
 import { StatCard } from './stat-card';
 import { RecentSalesTable } from './recent-sales-table';
 import { LowStockAlert } from './low-stock-alert';
+import { getAllProducts } from '@/lib/services/stock/stock.action';
+import { getAllSales } from '@/lib/services/sales/sale.action';
+import { getAllPurchases } from '@/lib/services/purchases/purchase.action';
+import { toast } from 'sonner';
 
 export default function DashboardComponent() {
-  const totalStock = mockProducts.reduce((sum, p) => sum + p.quantity, 0);
-  const totalSales = mockSales.reduce((sum, s) => sum + s.total, 0);
-  const totalPurchases = mockPurchases.reduce((sum, p) => sum + p.total, 0);
-  const totalCredits = mockCredits.filter(c => c.status !== 'paid').reduce((sum, c) => sum + c.remainingAmount, 0);
-  const lowStockCount = mockProducts.filter(p => p.quantity <= p.minStock).length;
+  const [products, setProducts] = useState<any[]>([]);
+  const [sales, setSales] = useState<any[]>([]);
+  const [purchases, setPurchases] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Charger les données depuis les API
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Charger les produits
+        const productsResult = await getAllProducts();
+        if (productsResult.success) {
+          setProducts(productsResult.data);
+        }
+
+        // Charger les ventes
+        const salesResult = await getAllSales();
+        if (salesResult.success) {
+          setSales(salesResult.data);
+        }
+
+        // Charger les achats
+        const purchasesResult = await getAllPurchases();
+        if (purchasesResult.success) {
+          setPurchases(purchasesResult.data);
+        }
+      } catch (error) {
+        toast.error('Erreur lors du chargement des données du tableau de bord');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  // Calculer les statistiques
+  const totalStock = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
+  const totalSales = sales.reduce((sum, s) => sum + (s.total || s.finalAmount || s.totalAmount || 0), 0);
+  const totalPurchases = purchases.reduce((sum, p) => sum + (p.total || p.finalAmount || p.totalAmount || 0), 0);
+  const totalCredits = sales.filter(s => !s.isPaid && s.paymentStatus !== 'PAID').reduce((sum, s) => sum + (s.total || s.finalAmount || s.totalAmount || 0), 0);
+  const lowStockCount = products.filter(p => (p.quantity || 0) <= (p.minStock || 0)).length;
 
   return (
     <div className="animate-fade-in">
@@ -21,11 +62,17 @@ export default function DashboardComponent() {
         description="Vue d'ensemble de votre activité"
       />
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+      {isLoading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <>
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         <StatCard
           title="Total Produits"
-          value={mockProducts.length}
+          value={products.length}
           subtitle="Types de produits"
           icon={Package}
           variant="primary"
@@ -71,12 +118,14 @@ export default function DashboardComponent() {
       {/* Content Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2">
-          <RecentSalesTable sales={mockSales} />
+          <RecentSalesTable sales={sales} />
         </div>
         <div>
-          <LowStockAlert products={mockProducts} />
+          <LowStockAlert products={products} />
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

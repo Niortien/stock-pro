@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react';
-import { Plus, Search, FileText, Download, Eye } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Search, FileText, Download, Eye, Printer, Trash2, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { mockProducts, mockInvoices } from '@/data/mockData';
+import { createInvoice, getAllInvoices } from '@/lib/services/invoices/invoice.action';
+import { getAllProducts } from '@/lib/services/stock/stock.action';
 
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -28,15 +29,49 @@ import { toast } from 'sonner';
 import { Invoice, InvoiceItem } from '@/types/type';
 
 export default function InvoicesComponents() {
-  const [invoices, setInvoices] = useState<Invoice[]>(mockInvoices);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
+  const [previewInvoice, setPreviewInvoice] = useState<any | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    clientName: '',
+    status: 'DRAFT'
+  });
 
   const [formData, setFormData] = useState({
     clientName: '',
     items: [{ productId: '', quantity: '' }] as { productId: string; quantity: string }[],
   });
+
+  // Charger les données depuis les API
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Charger les produits
+        const productsResult = await getAllProducts();
+        if (productsResult.success) {
+          setProducts(productsResult.data);
+        }
+
+        // Charger les factures
+        const invoicesResult = await getAllInvoices();
+        if (invoicesResult.success) {
+          setInvoices(invoicesResult.data);
+        }
+      } catch (error) {
+        toast.error('Erreur lors du chargement des données');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
 
   const filteredInvoices = invoices.filter(invoice =>
     invoice.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -67,7 +102,7 @@ export default function InvoicesComponents() {
 
   const calculateTotal = () => {
     return formData.items.reduce((sum, item) => {
-      const product = mockProducts.find(p => p.id === item.productId);
+      const product = products.find((p: any) => p.id === item.productId);
       if (product && item.quantity) {
         return sum + (product.unitPrice * Number(item.quantity));
       }
@@ -75,13 +110,13 @@ export default function InvoicesComponents() {
     }, 0);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const invoiceItems: InvoiceItem[] = formData.items
       .filter(item => item.productId && item.quantity)
       .map(item => {
-        const product = mockProducts.find(p => p.id === item.productId)!;
+        const product = products.find((p: any) => p.id === item.productId)!;
         const qty = Number(item.quantity);
         return {
           productId: product.id,
@@ -96,64 +131,281 @@ export default function InvoicesComponents() {
     const tax = subtotal * 0.19;
     const total = subtotal + tax;
 
-    const newInvoice: Invoice = {
-      id: Date.now().toString(),
+  const invoiceData = {
       invoiceNumber: `FAC-2024-${String(invoices.length + 1).padStart(3, '0')}`,
       clientName: formData.clientName,
       items: invoiceItems,
       subtotal,
       tax,
       total,
-      date: new Date(),
-      status: 'draft',
+      date: new Date().toISOString().split('T')[0],
+      status: 'DRAFT'
     };
 
-    setInvoices([newInvoice, ...invoices]);
-    toast.success('Facture créée avec succès');
-    setFormData({ clientName: '', items: [{ productId: '', quantity: '' }] });
-    setIsDialogOpen(false);
+    try {
+      const result = await createInvoice(invoiceData);
+      
+      if (result.success) {
+        // Recharger la liste des factures
+        const invoicesResult = await getAllInvoices();
+        if (invoicesResult.success) {
+          setInvoices(invoicesResult.data);
+        }
+        
+        toast.success('Facture créée avec succès');
+        setFormData({ clientName: '', items: [{ productId: '', quantity: '' }] });
+        setIsDialogOpen(false);
+      } else {
+        toast.error(result.error || 'Erreur lors de la création de la facture');
+      }
+    } catch (error) {
+      toast.error('Erreur inattendue lors de la création de la facture');
+    }
   };
 
-  const downloadInvoice = (invoice: Invoice) => {
+  const downloadInvoice = (invoice: any) => {
+    // Créer le contenu HTML pour le PDF
     const invoiceContent = `
-FACTURE
-========================================
-N°: ${invoice.invoiceNumber}
-Date: ${format(new Date(invoice.date), 'dd MMMM yyyy', { locale: fr })}
-Client: ${invoice.clientName}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Facture ${invoice.invoiceNumber}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
+    .header { text-align: center; margin-bottom: 30px; }
+    .invoice-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+    .invoice-info { font-size: 14px; color: #666; }
+    .client-info { margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px; }
+    .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .items-table th, .items-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+    .items-table th { background: #f8f9fa; font-weight: bold; }
+    .items-table .text-right { text-align: right; }
+    .totals { margin-top: 20px; text-align: right; }
+    .totals div { margin: 5px 0; }
+    .total { font-weight: bold; font-size: 18px; border-top: 2px solid #333; padding-top: 10px; }
+    .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="invoice-title">FACTURE</div>
+    <div class="invoice-info">
+      N°: ${invoice.invoiceNumber}<br>
+      Date: ${format(new Date(invoice.date || invoice.issueDate), 'dd MMMM yyyy', { locale: fr })}<br>
+    </div>
+  </div>
 
-----------------------------------------
-ARTICLES
-----------------------------------------
-${invoice.items.map(item => `${item.productName}
-  Qté: ${item.quantity} x ${item.unitPrice.toLocaleString()} FCFA = ${item.total.toLocaleString()} FCFA`).join('\n\n')}
+  <div class="client-info">
+    <strong>Client:</strong> ${invoice.customerId || invoice.clientName}
+  </div>
 
-----------------------------------------
-Sous-total: ${invoice.subtotal.toLocaleString()} FCFA
-TVA (19%): ${invoice.tax.toLocaleString()} FCFA
-----------------------------------------
-TOTAL: ${invoice.total.toLocaleString()} FCFA
-========================================
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th>Article</th>
+        <th class="text-right">Qté</th>
+        <th class="text-right">P.U.</th>
+        <th class="text-right">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(invoice.items || []).map((item: any) => `
+        <tr>
+          <td>${item.productName}</td>
+          <td class="text-right">${item.quantity}</td>
+          <td class="text-right">${item.unitPrice?.toLocaleString()} FCFA</td>
+          <td class="text-right">${item.total?.toLocaleString()} FCFA</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div class="totals">
+    <div>Sous-total: ${(invoice.subtotal || 0).toLocaleString()} FCFA</div>
+    <div>TVA (19%): ${(invoice.tax || 0).toLocaleString()} FCFA</div>
+    <div class="total">TOTAL: ${(invoice.total || invoice.finalAmount || 0).toLocaleString()} FCFA</div>
+  </div>
+
+  <div class="footer">
+    Merci pour votre confiance!
+  </div>
+</body>
+</html>
     `;
 
-    const blob = new Blob([invoiceContent], { type: 'text/plain' });
+    // Créer un Blob et télécharger le fichier
+    const blob = new Blob([invoiceContent], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${invoice.invoiceNumber}.txt`;
+    a.download = `${invoice.invoiceNumber}.html`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success('Facture téléchargée');
+    
+    toast.success('Facture téléchargée avec succès');
   };
 
-  const getStatusConfig = (status: Invoice['status']) => {
+  const printInvoice = (invoice: any) => {
+    // Créer le contenu HTML pour le PDF
+    const invoiceContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Facture ${invoice.invoiceNumber}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
+    .header { text-align: center; margin-bottom: 30px; }
+    .invoice-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+    .invoice-info { font-size: 14px; color: #666; }
+    .client-info { margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px; }
+    .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    .items-table th, .items-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+    .items-table th { background: #f8f9fa; font-weight: bold; }
+    .items-table .text-right { text-align: right; }
+    .totals { margin-top: 20px; text-align: right; }
+    .totals div { margin: 5px 0; }
+    .total { font-weight: bold; font-size: 18px; border-top: 2px solid #333; padding-top: 10px; }
+    .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="invoice-title">FACTURE</div>
+    <div class="invoice-info">
+      N°: ${invoice.invoiceNumber}<br>
+      Date: ${format(new Date(invoice.date || invoice.issueDate), 'dd MMMM yyyy', { locale: fr })}<br>
+    </div>
+  </div>
+
+  <div class="client-info">
+    <strong>Client:</strong> ${invoice.customerId || invoice.clientName}
+  </div>
+
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th>Article</th>
+        <th class="text-right">Qté</th>
+        <th class="text-right">P.U.</th>
+        <th class="text-right">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(invoice.items || []).map((item: any) => `
+        <tr>
+          <td>${item.productName}</td>
+          <td class="text-right">${item.quantity}</td>
+          <td class="text-right">${item.unitPrice?.toLocaleString()} FCFA</td>
+          <td class="text-right">${item.total?.toLocaleString()} FCFA</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div class="totals">
+    <div>Sous-total: ${(invoice.subtotal || 0).toLocaleString()} FCFA</div>
+    <div>TVA (19%): ${(invoice.tax || 0).toLocaleString()} FCFA</div>
+    <div class="total">TOTAL: ${(invoice.total || invoice.finalAmount || 0).toLocaleString()} FCFA</div>
+  </div>
+
+  <div class="footer">
+    Merci pour votre confiance!
+  </div>
+</body>
+</html>
+    `;
+
+    // Créer une fenêtre pour imprimer en PDF
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(invoiceContent);
+      printWindow.document.close();
+      printWindow.focus();
+      
+      // Attendre que le contenu soit chargé puis imprimer
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 250);
+      
+      toast.success('Facture générée pour impression PDF');
+    } else {
+      toast.error('Impossible d\'ouvrir la fenêtre d\'impression');
+    }
+  };
+
+  const getStatusConfig = (status: string) => {
     switch (status) {
-      case 'paid':
-        return { label: 'Payée', className: 'bg-success/20 text-success border-0' };
-      case 'sent':
-        return { label: 'Envoyée', className: 'bg-primary/20 text-primary border-0' };
+      case 'PAID':
+        return { 
+          label: 'Payée', 
+          className: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200 border-0 font-medium px-3 py-1',
+          dotColor: 'bg-green-500'
+        };
+      case 'SENT':
+        return { 
+          label: 'Envoyée', 
+          className: 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 border-0 font-medium px-3 py-1',
+          dotColor: 'bg-blue-500'
+        };
+      case 'DRAFT':
+        return { 
+          label: 'Brouillon', 
+          className: 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200 border-0 font-medium px-3 py-1',
+          dotColor: 'bg-gray-500'
+        };
       default:
-        return { label: 'Brouillon', className: 'bg-muted text-muted-foreground border-0' };
+        return { 
+          label: 'Brouillon', 
+          className: 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200 border-0 font-medium px-3 py-1',
+          dotColor: 'bg-gray-500'
+        };
+    }
+  };
+
+  const handleDeleteInvoice = async () => {
+    if (!selectedInvoice) return;
+    
+    try {
+      // Simuler la suppression (à adapter avec votre API)
+      setInvoices(invoices.filter(inv => inv.id !== selectedInvoice.id));
+      toast.success('Facture supprimée avec succès');
+      setDeleteDialogOpen(false);
+      setSelectedInvoice(null);
+    } catch (error) {
+      toast.error('Erreur lors de la suppression de la facture');
+    }
+  };
+
+  const handleEditInvoice = (invoice: any) => {
+    setSelectedInvoice(invoice);
+    setEditFormData({
+      clientName: invoice.clientName || invoice.customerId,
+      status: invoice.status
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedInvoice) return;
+    
+    try {
+      // Simuler la mise à jour (à adapter avec votre API)
+      setInvoices(invoices.map(inv => 
+        inv.id === selectedInvoice.id 
+          ? { ...inv, clientName: editFormData.clientName, status: editFormData.status }
+          : inv
+      ));
+      toast.success('Facture mise à jour avec succès');
+      setEditDialogOpen(false);
+      setSelectedInvoice(null);
+    } catch (error) {
+      toast.error('Erreur lors de la mise à jour de la facture');
     }
   };
 
@@ -196,7 +448,7 @@ TOTAL: ${invoice.total.toLocaleString()} FCFA
                             <SelectValue placeholder="Produit" />
                           </SelectTrigger>
                           <SelectContent>
-                            {mockProducts.map((product) => (
+                            {products.map((product: any) => (
                               <SelectItem key={product.id} value={product.id}>
                                 {product.name} - {product.unitPrice.toLocaleString()} FCFA
                               </SelectItem>
@@ -314,10 +566,16 @@ TOTAL: ${invoice.total.toLocaleString()} FCFA
                 </div>
               </div>
 
-              <Button onClick={() => downloadInvoice(previewInvoice)} className="w-full gap-2">
-                <Download className="h-4 w-4" />
-                Télécharger
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={() => downloadInvoice(previewInvoice)} className="flex-1 gap-2">
+                  <Download className="h-4 w-4" />
+                  Télécharger
+                </Button>
+                <Button onClick={() => printInvoice(previewInvoice)} className="flex-1 gap-2" variant="outline">
+                  <Printer className="h-4 w-4" />
+                  Imprimer PDF
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
@@ -388,38 +646,145 @@ TOTAL: ${invoice.total.toLocaleString()} FCFA
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredInvoices.map((invoice) => {
-                const statusConfig = getStatusConfig(invoice.status);
-                return (
-                  <tr key={invoice.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-6 py-4 font-medium text-foreground">{invoice.invoiceNumber}</td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">{invoice.clientName}</td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground">
-                      {format(new Date(invoice.date), 'dd MMM yyyy', { locale: fr })}
-                    </td>
-                    <td className="px-6 py-4 font-medium text-foreground">{invoice.total.toLocaleString()} FCFA</td>
-                    <td className="px-6 py-4">
-                      <Badge className={statusConfig.className}>
-                        {statusConfig.label}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => setPreviewInvoice(invoice)}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => downloadInvoice(invoice)}>
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+                    Chargement des factures...
+                  </td>
+                </tr>
+              ) : filteredInvoices.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+                    Aucune facture trouvée
+                  </td>
+                </tr>
+              ) : (
+                filteredInvoices.map((invoice: any) => {
+                  const statusConfig = getStatusConfig(invoice.status);
+                  return (
+                    <tr key={invoice.id} className="hover:bg-muted/20 transition-colors">
+                      <td className="px-6 py-4 font-medium text-foreground">{invoice.reference || invoice.invoiceNumber}</td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground">{invoice.customerId || invoice.clientName}</td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground">
+                        {format(new Date(invoice.issueDate || invoice.date), 'dd MMM yyyy', { locale: fr })}
+                      </td>
+                      <td className="px-6 py-4 font-medium text-foreground">{(invoice.finalAmount || invoice.total).toLocaleString()} FCFA</td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${getStatusConfig(invoice.status).dotColor}`} />
+                          <Badge className={getStatusConfig(invoice.status).className}>
+                            {getStatusConfig(invoice.status).label}
+                          </Badge>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="icon" onClick={() => setPreviewInvoice(invoice)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => downloadInvoice(invoice)}>
+                            <Download className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => printInvoice(invoice)}>
+                            <Printer className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleEditInvoice(invoice)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => {
+                              setSelectedInvoice(invoice);
+                              setDeleteDialogOpen(true);
+                            }}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmer la suppression</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-muted-foreground">
+              Êtes-vous sûr de vouloir supprimer la facture "{selectedInvoice?.invoiceNumber}" ?
+              Cette action est irréversible.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                Annuler
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={handleDeleteInvoice}
+                className="gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
+                Supprimer
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Invoice Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Modifier la facture</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleUpdateInvoice} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="editClientName">Nom du client</Label>
+              <Input
+                id="editClientName"
+                value={editFormData.clientName}
+                onChange={(e) => setEditFormData({ ...editFormData, clientName: e.target.value })}
+                placeholder="Ex: Restaurant Le Jardin"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="editStatus">Statut</Label>
+              <Select value={editFormData.status} onValueChange={(value) => setEditFormData({ ...editFormData, status: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Statut" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DRAFT">Brouillon</SelectItem>
+                  <SelectItem value="SENT">Envoyée</SelectItem>
+                  <SelectItem value="PAID">Payée</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Annuler
+              </Button>
+              <Button type="submit" className="gap-2">
+                <Edit className="h-4 w-4" />
+                Mettre à jour
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

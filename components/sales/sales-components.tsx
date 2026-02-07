@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react';
-import { Plus, Search, TrendingUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Search, TrendingUp, Trash2, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -20,17 +20,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { mockProducts, mockSales } from '@/data/mockData';
-
+import { createSale, getAllSales, deleteSale, updateSale } from '@/lib/services/sales/sale.action';
+import { getAllProducts } from '@/lib/services/stock/stock.action';
+import { Sale } from '@/lib/services/sales/sale.schema';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { toast } from 'sonner';
-import { Sale } from '@/types/type';
 
 export default function SalesComponents() {
-  const [sales, setSales] = useState<Sale[]>(mockSales);
+  const [sales, setSales] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [saleToDelete, setSaleToDelete] = useState<string | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [saleToEdit, setSaleToEdit] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [formData, setFormData] = useState({
     productId: '',
@@ -39,39 +45,158 @@ export default function SalesComponents() {
     isPaid: 'true',
   });
 
-  const filteredSales = sales.filter(sale =>
-    sale.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (sale.clientName && sale.clientName.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Charger les ventes et produits depuis le serveur au montage
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Charger les ventes
+        const salesResult = await getAllSales();
+        if (salesResult.success) {
+          setSales(salesResult.data);
+        }
 
-  const totalSales = sales.reduce((sum, s) => sum + s.total, 0);
-  const paidSales = sales.filter(s => s.isPaid).reduce((sum, s) => sum + s.total, 0);
+        // Charger les produits
+        const productsResult = await getAllProducts();
+        if (productsResult.success) {
+          setProducts(productsResult.data);
+        }
+      } catch (error) {
+        toast.error('Erreur lors du chargement des données');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const handleSubmit = (e: React.FormEvent) => {
+    loadData();
+  }, []);
+
+  const filteredSales = sales.filter(sale => {
+    // Support pour différents formats de données
+    const productName = sale.productName || (sale.items && sale.items[0]?.product?.name) || '';
+    const clientName = sale.customerId || sale.customerName || '';
+    
+    return productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           clientName.toLowerCase().includes(searchTerm.toLowerCase());
+  });
+
+  const totalSales = sales.reduce((sum, s) => sum + (s.finalAmount || s.totalAmount || s.total || 0), 0);
+  const paidSales = sales.filter(s => s.paymentStatus === 'PAID' || s.isPaid).reduce((sum, s) => sum + (s.finalAmount || s.totalAmount || s.total || 0), 0);
+
+  const handleDeleteSale = async (saleId: string) => {
+    setSaleToDelete(saleId);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteSale = async () => {
+    if (!saleToDelete) return;
+    
+    try {
+      const result = await deleteSale(saleToDelete);
+      if (result.success) {
+        toast.success('Vente supprimée avec succès');
+        // Recharger la liste
+        const salesResult = await getAllSales();
+        if (salesResult.success) {
+          setSales(salesResult.data);
+        }
+      } else {
+        toast.error(result.error || 'Erreur lors de la suppression');
+      }
+    } catch (error) {
+      toast.error('Erreur inattendue lors de la suppression');
+    } finally {
+      setDeleteDialogOpen(false);
+      setSaleToDelete(null);
+    }
+  };
+
+  const handleEditSale = (sale: any) => {
+    setSaleToEdit(sale);
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!saleToEdit) return;
+    
+    try {
+      const product = products.find(p => p.id === saleToEdit.productId);
+      if (!product) {
+        toast.error('Veuillez sélectionner un produit valide');
+        return;
+      }
+
+      const quantity = Number(saleToEdit.quantity);
+      const total = quantity * product.unitPrice;
+
+      const updateData = {
+        productId: saleToEdit.productId,
+        productName: product.name,
+        quantity: quantity,
+        unitPrice: product.unitPrice,
+        total: total,
+        clientName: saleToEdit.clientName || 'Client anonyme',
+        isPaid: saleToEdit.isPaid,
+        date: saleToEdit.date,
+      };
+
+      const result = await updateSale(saleToEdit.id, updateData);
+      
+      if (result.success) {
+        toast.success('Vente mise à jour avec succès');
+        setEditDialogOpen(false);
+        setSaleToEdit(null);
+        // Recharger la liste
+        const salesResult = await getAllSales();
+        if (salesResult.success) {
+          setSales(salesResult.data);
+        }
+      } else {
+        toast.error(result.error || 'Erreur lors de la mise à jour');
+      }
+    } catch (error) {
+      toast.error('Erreur inattendue lors de la mise à jour');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const product = mockProducts.find(p => p.id === formData.productId);
-    if (!product) return;
+    const product = products.find(p => p.id === formData.productId);
+    if (!product) {
+      toast.error('Veuillez sélectionner un produit valide');
+      return;
+    }
 
     const quantity = Number(formData.quantity);
     const total = quantity * product.unitPrice;
 
-    const newSale: Sale = {
-      id: Date.now().toString(),
+    const saleData = {
       productId: product.id,
       productName: product.name,
-      quantity,
+      quantity: quantity,
       unitPrice: product.unitPrice,
-      total,
-      clientName: formData.clientName || undefined,
-      date: new Date(),
+      total: total,
+      clientName: formData.clientName || 'Client anonyme',
       isPaid: formData.isPaid === 'true',
+      date: new Date().toISOString().split('T')[0],
     };
 
-    setSales([newSale, ...sales]);
-    toast.success('Vente enregistrée avec succès');
-    setFormData({ productId: '', quantity: '', clientName: '', isPaid: 'true' });
-    setIsDialogOpen(false);
+    const result = await createSale(saleData);
+    
+      if (result.success) {
+        // Recharger la liste des ventes depuis le serveur
+        const salesResult = await getAllSales();
+        if (salesResult.success) {
+          setSales(salesResult.data);
+        }
+        
+        toast.success('Vente enregistrée avec succès');
+        setFormData({ productId: '', quantity: '', clientName: '', isPaid: 'true' });
+        setIsDialogOpen(false);
+      } else {
+      toast.error(result.error || 'Erreur lors de l\'enregistrement de la vente');
+    }
   };
 
   return (
@@ -99,7 +224,7 @@ export default function SalesComponents() {
                       <SelectValue placeholder="Sélectionner un produit" />
                     </SelectTrigger>
                     <SelectContent>
-                      {mockProducts.map((product) => (
+                      {products.map((product) => (
                         <SelectItem key={product.id} value={product.id}>
                           {product.name} - {product.unitPrice.toLocaleString()} FCFA
                         </SelectItem>
@@ -144,7 +269,7 @@ export default function SalesComponents() {
                   <div className="p-4 rounded-lg bg-muted/50">
                     <p className="text-sm text-muted-foreground">Total de la vente</p>
                     <p className="text-2xl font-bold text-foreground">
-                      {((mockProducts.find(p => p.id === formData.productId)?.unitPrice || 0) * Number(formData.quantity)).toLocaleString()} FCFA
+                      {((products.find(p => p.id === formData.productId)?.unitPrice || 0) * Number(formData.quantity)).toLocaleString()} FCFA
                     </p>
                   </div>
                 )}
@@ -221,30 +346,203 @@ export default function SalesComponents() {
                 <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Statut</th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredSales.map((sale) => (
-                <tr key={sale.id} className="hover:bg-muted/20 transition-colors">
-                  <td className="px-6 py-4 font-medium text-foreground">{sale.productName}</td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">{sale.clientName || 'Client anonyme'}</td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">{sale.quantity}</td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">{sale.unitPrice.toLocaleString()} FCFA</td>
-                  <td className="px-6 py-4 font-medium text-foreground">{sale.total.toLocaleString()} FCFA</td>
-                  <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {format(new Date(sale.date), 'dd MMM yyyy', { locale: fr })}
-                  </td>
-                  <td className="px-6 py-4">
-                    <Badge className={sale.isPaid ? 'bg-success/20 text-success border-0' : 'bg-warning/20 text-warning border-0'}>
-                      {sale.isPaid ? 'Payée' : 'À crédit'}
-                    </Badge>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">
+                    Chargement des ventes...
                   </td>
                 </tr>
-              ))}
+              ) : filteredSales.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-8 text-center text-muted-foreground">
+                    Aucune vente trouvée
+                  </td>
+                </tr>
+              ) : (
+                filteredSales.map((sale) => {
+                  // Support pour différents formats de données
+                  const productName = sale.productName || (sale.items && sale.items[0]?.product?.name) || 'Produit inconnu';
+                  const clientName = sale.customerId === 'anonymous' ? 'Client anonyme' : (sale.customerName || sale.customerId || 'Client inconnu');
+                  const quantity = sale.quantity || (sale.items && sale.items[0]?.quantity) || 1;
+                  const unitPrice = sale.unitPrice || (sale.items && sale.items[0]?.unitPrice) || 0;
+                  const total = sale.total || sale.finalAmount || sale.totalAmount || 0;
+                  const isPaid = sale.isPaid !== undefined ? sale.isPaid : (sale.paymentStatus === 'PAID');
+                  
+                  return (
+                    <tr key={sale.id} className="hover:bg-muted/20 transition-colors">
+                      <td className="px-6 py-4 font-medium text-foreground">{productName}</td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground">{clientName}</td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground">{quantity}</td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground">{unitPrice.toLocaleString()} FCFA</td>
+                      <td className="px-6 py-4 font-medium text-foreground">{total.toLocaleString()} FCFA</td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground">
+                        {format(new Date(sale.date), 'dd MMM yyyy', { locale: fr })}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${isPaid ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                          <Badge className={`${isPaid ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200' : 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200'} border-0 font-medium px-3 py-1`}>
+                            {isPaid ? 'Payée' : 'À crédit'}
+                          </Badge>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEditSale(sale)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleDeleteSale(sale.id)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </div>
+      
+      {/* Modal de confirmation de suppression */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmer la suppression</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              Êtes-vous sûr de vouloir supprimer cette vente ? Cette action est irréversible.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setSaleToDelete(null);
+              }}
+            >
+              Annuler
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmDeleteSale}
+            >
+              Supprimer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Modal d'édition complète */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Modifier la vente</DialogTitle>
+          </DialogHeader>
+          {saleToEdit && (
+            <form onSubmit={handleUpdateSale} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Produit</Label>
+                <Select value={saleToEdit.productId} onValueChange={(value) => {
+                  const selectedProduct = products.find(p => p.id === value);
+                  setSaleToEdit({ 
+                    ...saleToEdit, 
+                    productId: value,
+                    productName: selectedProduct?.name || '',
+                    unitPrice: selectedProduct?.unitPrice || 0
+                  });
+                }}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sélectionner un produit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map((product) => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.name} - {product.unitPrice.toLocaleString()} FCFA
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editClientName">Client</Label>
+                <Input
+                  id="editClientName"
+                  value={saleToEdit.clientName || ''}
+                  onChange={(e) => setSaleToEdit({ ...saleToEdit, clientName: e.target.value })}
+                  placeholder="Ex: Restaurant Le Jardin"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editQuantity">Quantité</Label>
+                <Input
+                  id="editQuantity"
+                  type="number"
+                  value={saleToEdit.quantity}
+                  onChange={(e) => setSaleToEdit({ ...saleToEdit, quantity: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editDate">Date</Label>
+                <Input
+                  id="editDate"
+                  type="date"
+                  value={saleToEdit.date?.split('T')[0] || ''}
+                  onChange={(e) => setSaleToEdit({ ...saleToEdit, date: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Paiement</Label>
+                <Select value={saleToEdit.isPaid?.toString()} onValueChange={(value) => setSaleToEdit({ ...saleToEdit, isPaid: value === 'true' })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">Payée</SelectItem>
+                    <SelectItem value="false">À crédit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setEditDialogOpen(false);
+                    setSaleToEdit(null);
+                  }}
+                >
+                  Annuler
+                </Button>
+                <Button type="submit">
+                  Mettre à jour
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

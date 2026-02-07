@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,19 +20,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { mockProducts } from '@/data/mockData';
 
 import { toast } from 'sonner';
-import { Product } from '@/types/type';
+import { createProduct, getAllProducts, deleteProduct } from '@/lib/services/stock/stock.action';
 
 const categories = ['Sodas', 'Eau', 'Jus', 'Bières', 'Vins', 'Énergisantes'];
 
 export default function StockComponent() {
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [products, setProducts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -40,8 +42,26 @@ export default function StockComponent() {
     quantity: '',
     unitPrice: '',
     minStock: '',
-    unit: 'bouteilles',
+    unit: 'kg',
   });
+
+  // Charger les produits depuis le serveur au montage
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const result = await getAllProducts();
+        if (result.success) {
+          setProducts(result.data);
+        }
+      } catch (error) {
+        toast.error('Erreur lors du chargement des produits');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadProducts();
+  }, []);
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -49,36 +69,38 @@ export default function StockComponent() {
     return matchesSearch && matchesCategory;
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (editingProduct) {
-      setProducts(products.map(p => 
-        p.id === editingProduct.id 
-          ? { ...p, ...formData, quantity: Number(formData.quantity), unitPrice: Number(formData.unitPrice), minStock: Number(formData.minStock) }
-          : p
-      ));
-      toast.success('Produit modifié avec succès');
-    } else {
-      const newProduct: Product = {
-        id: Date.now.toString(),
-        name: formData.name,
-        category: formData.category,
-        quantity: Number(formData.quantity),
-        unitPrice: Number(formData.unitPrice),
-        minStock: Number(formData.minStock),
-        unit: formData.unit,
-        createdAt: new Date(),
-      };
-      setProducts([...products, newProduct]);
-      toast.success('Produit ajouté avec succès');
-    }
+    // Envoyer uniquement les propriétés attendues par le serveur
+    const productData = {
+      name: formData.name,
+      category: formData.category,
+      quantity: Number(formData.quantity),
+      unitPrice: Number(formData.unitPrice),
+      minStock: Number(formData.minStock),
+      unit: formData.unit,
+    };
+
+    // Appel réel à l'API pour créer le produit
+    const result = await createProduct(productData);
     
-    resetForm();
-    setIsDialogOpen(false);
+    if (result.success) {
+      // Recharger les produits depuis le serveur
+      const reloadResult = await getAllProducts();
+      if (reloadResult.success) {
+        setProducts(reloadResult.data);
+      }
+      
+      toast.success('Produit créé avec succès');
+      resetForm();
+      setIsDialogOpen(false);
+    } else {
+      toast.error(result.error || 'Erreur lors de la création du produit');
+    }
   };
 
-  const handleEdit = (product: Product) => {
+  const handleEdit = (product: any) => {
     setEditingProduct(product);
     setFormData({
       name: product.name,
@@ -92,16 +114,48 @@ export default function StockComponent() {
   };
 
   const handleDelete = (id: string) => {
-    setProducts(products.filter(p => p.id !== id));
-    toast.success('Produit supprimé');
+    setProductToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!productToDelete) return;
+    
+    try {
+      const result = await deleteProduct(productToDelete);
+      
+      if (result.success) {
+        // Recharger les produits depuis le serveur
+        const reloadResult = await getAllProducts();
+        if (reloadResult.success) {
+          setProducts(reloadResult.data);
+        }
+        
+        toast.success('Produit supprimé avec succès');
+      } else {
+        toast.error(result.error || 'Erreur lors de la suppression du produit');
+      }
+    } catch (error) {
+      toast.error('Erreur lors de la suppression du produit');
+    } finally {
+      setDeleteDialogOpen(false);
+      setProductToDelete(null);
+    }
   };
 
   const resetForm = () => {
-    setFormData({ name: '', category: '', quantity: '', unitPrice: '', minStock: '', unit: 'bouteilles' });
+    setFormData({ 
+      name: '', 
+      category: '', 
+      quantity: '', 
+      unitPrice: '', 
+      minStock: '', 
+      unit: 'kg' 
+    });
     setEditingProduct(null);
   };
 
-  const getStockStatus = (product: Product) => {
+  const getStockStatus = (product: any) => {
     if (product.quantity <= product.minStock * 0.5) return { label: 'Critique', variant: 'destructive' as const };
     if (product.quantity <= product.minStock) return { label: 'Faible', variant: 'secondary' as const };
     return { label: 'OK', variant: 'default' as const };
@@ -290,6 +344,39 @@ export default function StockComponent() {
           </table>
         </div>
       </div>
+
+      {/* Dialog de confirmation de suppression */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Confirmer la suppression</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-muted-foreground">
+              Êtes-vous sûr de vouloir supprimer ce produit ? Cette action est irréversible.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setProductToDelete(null);
+              }}
+            >
+              Annuler
+            </Button>
+            <Button 
+              type="button" 
+              variant="destructive" 
+              onClick={confirmDelete}
+            >
+              Supprimer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -38,9 +38,12 @@ export function RecentSalesTable({ sales }: RecentSalesTableProps) {
                   {format(new Date(sale.date), 'dd MMM yyyy', { locale: fr })}
                 </td>
                 <td className="px-6 py-4">
-                  <Badge variant={sale.isPaid ? 'default' : 'secondary'} className={sale.isPaid ? 'bg-success text-success-foreground' : 'bg-warning text-warning-foreground'}>
-                    {sale.isPaid ? 'Payée' : 'En attente'}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${sale.isPaid ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                    <Badge className={`${sale.isPaid ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200' : 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200'} border-0 font-medium px-3 py-1`}>
+                      {sale.isPaid ? 'Payée' : 'À crédit'}
+                    </Badge>
+                  </div>
                 </td>
               </tr>
             ))}
