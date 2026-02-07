@@ -156,9 +156,21 @@ export default function StockComponent() {
   };
 
   const getStockStatus = (product: any) => {
-    if (product.quantity <= product.minStock * 0.5) return { label: 'Critique', variant: 'destructive' as const };
-    if (product.quantity <= product.minStock) return { label: 'Faible', variant: 'secondary' as const };
-    return { label: 'OK', variant: 'default' as const };
+    if (product.quantity <= product.minStock * 0.5) return { 
+      label: 'Critique', 
+      className: 'bg-red-100 text-red-800 border-red-200 font-medium px-3 py-1',
+      icon: '🚨'
+    };
+    if (product.quantity <= product.minStock) return { 
+      label: 'Faible', 
+      className: 'bg-amber-100 text-amber-800 border-amber-200 font-medium px-3 py-1',
+      icon: '⚠'
+    };
+    return { 
+      label: 'OK', 
+      className: 'bg-emerald-100 text-emerald-800 border-emerald-200 font-medium px-3 py-1',
+      icon: '✓'
+    };
   };
 
   return (
@@ -263,6 +275,56 @@ export default function StockComponent() {
         }
       />
 
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-xl bg-blue-100">
+              <Package className="h-6 w-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-blue-600 font-medium">Total produits</p>
+              <p className="text-2xl font-bold text-foreground">{products.length}</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-xl bg-amber-100">
+              <Package className="h-6 w-6 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-sm text-amber-600 font-medium">Stock faible</p>
+              <p className="text-2xl font-bold text-foreground">{products.filter(p => p.quantity <= p.minStock).length}</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-xl bg-red-100">
+              <Package className="h-6 w-6 text-red-600" />
+            </div>
+            <div>
+              <p className="text-sm text-red-600 font-medium">Stock critique</p>
+              <p className="text-2xl font-bold text-foreground">{products.filter(p => p.quantity <= p.minStock * 0.5).length}</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-xl bg-emerald-100">
+              <Package className="h-6 w-6 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-sm text-emerald-600 font-medium">Valeur totale</p>
+              <p className="text-2xl font-bold text-foreground">
+                {products.reduce((sum, p) => sum + (p.quantity * p.unitPrice), 0).toLocaleString()} FCFA
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="relative flex-1 max-w-md">
@@ -275,7 +337,7 @@ export default function StockComponent() {
           />
         </div>
         <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-45">
             <SelectValue placeholder="Catégorie" />
           </SelectTrigger>
           <SelectContent>
@@ -320,10 +382,8 @@ export default function StockComponent() {
                     <td className="px-6 py-4 text-sm text-muted-foreground">{product.unitPrice.toLocaleString()} FCFA</td>
                     <td className="px-6 py-4 text-sm font-medium text-foreground">{(product.quantity * product.unitPrice).toLocaleString()} FCFA</td>
                     <td className="px-6 py-4">
-                      <Badge 
-                        variant={status.variant}
-                        className={status.label === 'OK' ? 'bg-success/20 text-success border-0' : status.label === 'Faible' ? 'bg-warning/20 text-warning border-0' : ''}
-                      >
+                      <Badge className={`${status.className} gap-1`}>
+                        <span className="text-xs">{status.icon}</span>
                         {status.label}
                       </Badge>
                     </td>

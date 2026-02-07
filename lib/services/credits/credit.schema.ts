@@ -3,11 +3,11 @@ import { z } from "zod";
 // Créance
 export const CreditSchema = z.object({
   id: z.string().optional(),
-  reference: z.string().min(1, "La référence est requise"),
-  customerId: z.string().min(1, "L'ID du client est requis"),
-  saleId: z.string().optional(),
+  clientName: z.string().min(1, "Le nom du client est requis"),
   amount: z.number().min(0, "Le montant doit être positif"),
   remainingAmount: z.number().min(0, "Le montant restant doit être positif"),
+  description: z.string().optional(),
+  date: z.string().min(1, "La date est requise"),
   dueDate: z.string().min(1, "La date d'échéance est requise"),
   status: z.enum(["PENDING", "PARTIAL", "PAID", "OVERDUE", "CANCELLED"]).default("PENDING"),
   paymentMethod: z.enum(["CASH", "CARD", "BANK_TRANSFER", "CHECK"]).optional(),

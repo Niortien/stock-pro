@@ -13,16 +13,16 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { mockCredits } from '@/data/mockData';
-
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { toast } from 'sonner';
-import { Credit } from '@/types/type';
+import { Credit } from '@/lib/services/credits/credit.schema';
 import { PageHeader } from '../ui/page-header';
+import { createCredit, getAllCredits } from '@/lib/services/credits/credit.action';
+import { useEffect } from 'react';
 
 export default function CreditsComponents() {
-  const [credits, setCredits] = useState<Credit[]>(mockCredits);
+  const [credits, setCredits] = useState<Credit[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
@@ -40,27 +40,32 @@ export default function CreditsComponents() {
     credit.clientName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const totalCredits = credits.filter(c => c.status !== 'paid').reduce((sum, c) => sum + c.remainingAmount, 0);
-  const pendingCredits = credits.filter(c => c.status === 'pending').length;
+  const totalCredits = credits.filter(c => c.status !== 'PAID').reduce((sum, c) => sum + c.remainingAmount, 0);
+  const pendingCredits = credits.filter(c => c.status === 'PENDING').length;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const newCredit: Credit = {
-      id: Date.now().toString(),
+    const creditData = {
       clientName: formData.clientName,
       amount: Number(formData.amount),
       remainingAmount: Number(formData.amount),
       description: formData.description,
-      date: new Date(),
-      dueDate: new Date(formData.dueDate),
-      status: 'pending',
+      date: new Date().toISOString().split('T')[0],
+      dueDate: formData.dueDate,
+      status: 'PENDING' as const,
     };
 
-    setCredits([newCredit, ...credits]);
-    toast.success('Créance enregistrée');
-    setFormData({ clientName: '', amount: '', description: '', dueDate: '' });
-    setIsDialogOpen(false);
+    const result = await createCredit(creditData);
+    if (result.success) {
+      toast.success('Créance enregistrée');
+      setFormData({ clientName: '', amount: '', description: '', dueDate: '' });
+      setIsDialogOpen(false);
+      // Refresh credits list
+      loadCredits();
+    } else {
+      toast.error(result.error);
+    }
   };
 
   const handlePayment = () => {
@@ -74,7 +79,7 @@ export default function CreditsComponents() {
         return {
           ...c,
           remainingAmount: Math.max(0, newRemaining),
-          status: newRemaining <= 0 ? 'paid' : newRemaining < c.amount ? 'partial' : 'pending',
+          status: newRemaining <= 0 ? 'PAID' : newRemaining < c.amount ? 'PARTIAL' : 'PENDING',
         };
       }
       return c;
@@ -86,14 +91,51 @@ export default function CreditsComponents() {
     setPaymentAmount('');
   };
 
+  const loadCredits = async () => {
+    const result = await getAllCredits();
+    if (result.success) {
+      setCredits(result.data);
+    } else {
+      toast.error('Erreur lors du chargement des créances');
+    }
+  };
+
+  useEffect(() => {
+    loadCredits();
+  }, []);
+
   const getStatusConfig = (status: Credit['status']) => {
     switch (status) {
-      case 'paid':
-        return { label: 'Payée', className: 'bg-success/20 text-success border-0' };
-      case 'partial':
-        return { label: 'Partielle', className: 'bg-warning/20 text-warning border-0' };
+      case 'PAID':
+        return { 
+          label: 'Payée', 
+          className: 'bg-emerald-100 text-emerald-800 border-emerald-200 font-medium',
+          icon: '✓'
+        };
+      case 'PARTIAL':
+        return { 
+          label: 'Partielle', 
+          className: 'bg-amber-100 text-amber-800 border-amber-200 font-medium',
+          icon: '◐'
+        };
+      case 'OVERDUE':
+        return { 
+          label: 'En retard', 
+          className: 'bg-red-100 text-red-800 border-red-200 font-medium',
+          icon: '⚠'
+        };
+      case 'CANCELLED':
+        return { 
+          label: 'Annulée', 
+          className: 'bg-gray-100 text-gray-600 border-gray-200 font-medium',
+          icon: '✕'
+        };
       default:
-        return { label: 'En attente', className: 'bg-destructive/20 text-destructive border-0' };
+        return { 
+          label: 'En attente', 
+          className: 'bg-blue-100 text-blue-800 border-blue-200 font-medium',
+          icon: '⏳'
+        };
     }
   };
 
@@ -210,37 +252,48 @@ export default function CreditsComponents() {
       </Dialog>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-warning/10">
-              <CreditCard className="h-6 w-6 text-warning" />
+            <div className="p-3 rounded-xl bg-blue-100">
+              <CreditCard className="h-6 w-6 text-blue-600" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total créances</p>
+              <p className="text-sm text-blue-600 font-medium">Total créances</p>
               <p className="text-2xl font-bold text-foreground">{totalCredits.toLocaleString()} FCFA</p>
             </div>
           </div>
         </div>
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-destructive/10">
-              <CreditCard className="h-6 w-6 text-destructive" />
+            <div className="p-3 rounded-xl bg-orange-100">
+              <CreditCard className="h-6 w-6 text-orange-600" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">En attente</p>
+              <p className="text-sm text-orange-600 font-medium">En attente</p>
               <p className="text-2xl font-bold text-foreground">{pendingCredits}</p>
             </div>
           </div>
         </div>
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-success/10">
-              <CheckCircle className="h-6 w-6 text-success" />
+            <div className="p-3 rounded-xl bg-amber-100">
+              <CreditCard className="h-6 w-6 text-amber-600" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Créances soldées</p>
-              <p className="text-2xl font-bold text-foreground">{credits.filter(c => c.status === 'paid').length}</p>
+              <p className="text-sm text-amber-600 font-medium">Partielles</p>
+              <p className="text-2xl font-bold text-foreground">{credits.filter(c => c.status === 'PARTIAL').length}</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-xl bg-emerald-100">
+              <CheckCircle className="h-6 w-6 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-sm text-emerald-600 font-medium">Créances soldées</p>
+              <p className="text-2xl font-bold text-foreground">{credits.filter(c => c.status === 'PAID').length}</p>
             </div>
           </div>
         </div>
@@ -285,12 +338,13 @@ export default function CreditsComponents() {
                       {format(new Date(credit.dueDate), 'dd MMM yyyy', { locale: fr })}
                     </td>
                     <td className="px-6 py-4">
-                      <Badge className={statusConfig.className}>
+                      <Badge className={`${statusConfig.className} gap-1 px-3 py-1`}>
+                        <span className="text-xs">{statusConfig.icon}</span>
                         {statusConfig.label}
                       </Badge>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {credit.status !== 'paid' && (
+                      {credit.status !== 'PAID' && (
                         <Button
                           size="sm"
                           variant="outline"

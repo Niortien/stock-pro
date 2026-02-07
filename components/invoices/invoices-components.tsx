@@ -128,7 +128,7 @@ export default function InvoicesComponents() {
       });
 
     const subtotal = invoiceItems.reduce((sum, item) => sum + item.total, 0);
-    const tax = subtotal * 0.19;
+    const tax = subtotal * 0;
     const total = subtotal + tax;
 
   const invoiceData = {
@@ -223,7 +223,7 @@ export default function InvoicesComponents() {
 
   <div class="totals">
     <div>Sous-total: ${(invoice.subtotal || 0).toLocaleString()} FCFA</div>
-    <div>TVA (19%): ${(invoice.tax || 0).toLocaleString()} FCFA</div>
+    <div>TVA (0%): ${(invoice.tax || 0).toLocaleString()} FCFA</div>
     <div class="total">TOTAL: ${(invoice.total || invoice.finalAmount || 0).toLocaleString()} FCFA</div>
   </div>
 
@@ -308,7 +308,7 @@ export default function InvoicesComponents() {
 
   <div class="totals">
     <div>Sous-total: ${(invoice.subtotal || 0).toLocaleString()} FCFA</div>
-    <div>TVA (19%): ${(invoice.tax || 0).toLocaleString()} FCFA</div>
+    <div>TVA (0%): ${(invoice.tax || 0).toLocaleString()} FCFA</div>
     <div class="total">TOTAL: ${(invoice.total || invoice.finalAmount || 0).toLocaleString()} FCFA</div>
   </div>
 
@@ -343,26 +343,33 @@ export default function InvoicesComponents() {
       case 'PAID':
         return { 
           label: 'Payée', 
-          className: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200 border-0 font-medium px-3 py-1',
-          dotColor: 'bg-green-500'
+          className: 'bg-emerald-100 text-emerald-800 border-emerald-200 font-medium px-3 py-1',
+          icon: '✓'
         };
       case 'SENT':
         return { 
           label: 'Envoyée', 
-          className: 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200 border-0 font-medium px-3 py-1',
-          dotColor: 'bg-blue-500'
+          className: 'bg-blue-100 text-blue-800 border-blue-200 font-medium px-3 py-1',
+          icon: '📤'
+        };
+      case 'OVERDUE':
+        return { 
+          label: 'En retard', 
+          className: 'bg-red-100 text-red-800 border-red-200 font-medium px-3 py-1',
+          icon: '⚠'
+        };
+      case 'CANCELLED':
+        return { 
+          label: 'Annulée', 
+          className: 'bg-gray-100 text-gray-600 border-gray-200 font-medium px-3 py-1',
+          icon: '✕'
         };
       case 'DRAFT':
-        return { 
-          label: 'Brouillon', 
-          className: 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200 border-0 font-medium px-3 py-1',
-          dotColor: 'bg-gray-500'
-        };
       default:
         return { 
           label: 'Brouillon', 
-          className: 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200 border-0 font-medium px-3 py-1',
-          dotColor: 'bg-gray-500'
+          className: 'bg-amber-100 text-amber-800 border-amber-200 font-medium px-3 py-1',
+          icon: '📝'
         };
     }
   };
@@ -482,12 +489,12 @@ export default function InvoicesComponents() {
                     <span>{calculateTotal().toLocaleString()} FCFA</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">TVA (19%)</span>
-                    <span>{(calculateTotal() * 0.19).toLocaleString()} FCFA</span>
+                    <span className="text-muted-foreground">TVA (0%)</span>
+                    <span>{(calculateTotal() * 0).toLocaleString()} FCFA</span>
                   </div>
                   <div className="flex justify-between font-bold pt-2 border-t border-border">
                     <span>Total</span>
-                    <span>{(calculateTotal() * 1.19).toLocaleString()} FCFA</span>
+                    <span>{calculateTotal().toLocaleString()} FCFA</span>
                   </div>
                 </div>
 
@@ -518,7 +525,8 @@ export default function InvoicesComponents() {
                     {format(new Date(previewInvoice.date), 'dd MMMM yyyy', { locale: fr })}
                   </p>
                 </div>
-                <Badge className={getStatusConfig(previewInvoice.status).className}>
+                <Badge className={`${getStatusConfig(previewInvoice.status).className} gap-1`}>
+                  <span className="text-xs">{getStatusConfig(previewInvoice.status).icon}</span>
                   {getStatusConfig(previewInvoice.status).label}
                 </Badge>
               </div>
@@ -539,7 +547,7 @@ export default function InvoicesComponents() {
                     </tr>
                   </thead>
                   <tbody>
-                    {previewInvoice.items.map((item, idx) => (
+                    {previewInvoice.items.map((item: any, idx: number) => (
                       <tr key={idx} className="border-t">
                         <td className="px-4 py-2">{item.productName}</td>
                         <td className="px-4 py-2 text-right">{item.quantity}</td>
@@ -557,7 +565,7 @@ export default function InvoicesComponents() {
                   <span>{previewInvoice.subtotal.toLocaleString()} FCFA</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">TVA (19%)</span>
+                  <span className="text-muted-foreground">TVA (0%)</span>
                   <span>{previewInvoice.tax.toLocaleString()} FCFA</span>
                 </div>
                 <div className="flex justify-between font-bold text-lg pt-2 border-t">
@@ -582,38 +590,49 @@ export default function InvoicesComponents() {
       </Dialog>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-primary/10">
-              <FileText className="h-6 w-6 text-primary" />
+            <div className="p-3 rounded-xl bg-blue-100">
+              <FileText className="h-6 w-6 text-blue-600" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total factures</p>
+              <p className="text-sm text-blue-600 font-medium">Total factures</p>
               <p className="text-2xl font-bold text-foreground">{invoices.length}</p>
             </div>
           </div>
         </div>
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-success/10">
-              <FileText className="h-6 w-6 text-success" />
+            <div className="p-3 rounded-xl bg-amber-100">
+              <FileText className="h-6 w-6 text-amber-600" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Factures payées</p>
-              <p className="text-2xl font-bold text-foreground">{invoices.filter(i => i.status === 'paid').length}</p>
+              <p className="text-sm text-amber-600 font-medium">Brouillons</p>
+              <p className="text-2xl font-bold text-foreground">{invoices.filter(i => i.status === 'DRAFT').length}</p>
             </div>
           </div>
         </div>
-        <div className="rounded-xl border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-warning/10">
-              <FileText className="h-6 w-6 text-warning" />
+            <div className="p-3 rounded-xl bg-emerald-100">
+              <FileText className="h-6 w-6 text-emerald-600" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Montant total</p>
+              <p className="text-sm text-emerald-600 font-medium">Factures payées</p>
+              <p className="text-2xl font-bold text-foreground">{invoices.filter(i => i.status === 'PAID').length}</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-card p-6 shadow-sm hover:shadow-md transition-shadow">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-xl bg-purple-100">
+              <FileText className="h-6 w-6 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-sm text-purple-600 font-medium">Montant total</p>
               <p className="text-2xl font-bold text-foreground">
-                {invoices.reduce((sum, i) => sum + i.total, 0).toLocaleString()} FCFA
+                {invoices.reduce((sum, i) => sum + (i.total || i.finalAmount || 0), 0).toLocaleString()} FCFA
               </p>
             </div>
           </div>
@@ -670,12 +689,10 @@ export default function InvoicesComponents() {
                       </td>
                       <td className="px-6 py-4 font-medium text-foreground">{(invoice.finalAmount || invoice.total).toLocaleString()} FCFA</td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${getStatusConfig(invoice.status).dotColor}`} />
-                          <Badge className={getStatusConfig(invoice.status).className}>
-                            {getStatusConfig(invoice.status).label}
-                          </Badge>
-                        </div>
+                        <Badge className={`${getStatusConfig(invoice.status).className} gap-1`}>
+                          <span className="text-xs">{getStatusConfig(invoice.status).icon}</span>
+                          {getStatusConfig(invoice.status).label}
+                        </Badge>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex justify-end gap-2">
