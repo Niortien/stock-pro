@@ -18,7 +18,7 @@ import { fr } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { Credit } from '@/lib/services/credits/credit.schema';
 import { PageHeader } from '../ui/page-header';
-import { createCredit, getAllCredits } from '@/lib/services/credits/credit.action';
+import { createCredit, getAllCredits, updateCredit } from '@/lib/services/credits/credit.action';
 import { useEffect } from 'react';
 
 export default function CreditsComponents() {
@@ -68,27 +68,37 @@ export default function CreditsComponents() {
     }
   };
 
-  const handlePayment = () => {
-    if (!selectedCredit) return;
+  const handlePayment = async () => {
+    if (!selectedCredit?.id) return;
 
     const payment = Number(paymentAmount);
     const newRemaining = selectedCredit.remainingAmount - payment;
+    const newStatus = newRemaining <= 0 ? 'PAID' as const : newRemaining < selectedCredit.amount ? 'PARTIAL' as const : 'PENDING' as const;
 
-    setCredits(credits.map(c => {
-      if (c.id === selectedCredit.id) {
-        return {
-          ...c,
-          remainingAmount: Math.max(0, newRemaining),
-          status: newRemaining <= 0 ? 'PAID' : newRemaining < c.amount ? 'PARTIAL' : 'PENDING',
-        };
-      }
-      return c;
-    }));
+    // Mettre à jour le crédit avec le nouveau montant restant et statut
+    const creditUpdateData = {
+      clientName: selectedCredit.clientName,
+      amount: selectedCredit.amount,
+      remainingAmount: Math.max(0, newRemaining),
+      description: selectedCredit.description,
+      date: selectedCredit.date,
+      dueDate: selectedCredit.dueDate,
+      status: newStatus,
+    };
 
-    toast.success(`Paiement de ${payment.toLocaleString()} FCFA enregistré`);
-    setIsPaymentDialogOpen(false);
-    setSelectedCredit(null);
-    setPaymentAmount('');
+    const result = await updateCredit(selectedCredit.id, creditUpdateData);
+    
+    if (result.success) {
+      // Recharger les crédits depuis le serveur pour avoir les données à jour
+      await loadCredits();
+      
+      toast.success(`Paiement de ${payment.toLocaleString()} FCFA enregistré`);
+      setIsPaymentDialogOpen(false);
+      setSelectedCredit(null);
+      setPaymentAmount('');
+    } else {
+      toast.error(result.error || 'Erreur lors de l\'enregistrement du paiement');
+    }
   };
 
   const loadCredits = async () => {

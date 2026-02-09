@@ -13,7 +13,7 @@ const CreditApi = {
   getById: { method: "GET", endpoint: (id: string) => `${BASE_URL}/credits/${id}` },
   update: { method: "PATCH", endpoint: (id: string) => `${BASE_URL}/credits/${id}` },
   delete: { method: "DELETE", endpoint: (id: string) => `${BASE_URL}/credits/${id}` },
-  updateStatus: { method: "PATCH", endpoint: (id: string) => `${BASE_URL}/credits/${id}/status` },
+  updateStatus: { method: "PATCH", endpoint: (id: string) => `${BASE_URL}/credits/${id}` },
   
   // Paiements de créances
   addPayment: { method: "POST", endpoint: (creditId: string) => `${BASE_URL}/credits/${creditId}/payments` },

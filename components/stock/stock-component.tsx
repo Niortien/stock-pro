@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select';
 
 import { toast } from 'sonner';
-import { createProduct, getAllProducts, deleteProduct } from '@/lib/services/stock/stock.action';
+import { createProduct, getAllProducts, deleteProduct, updateProduct } from '@/lib/services/stock/stock.action';
 
 const categories = ['Sodas', 'Eau', 'Jus', 'Bières', 'Vins', 'Énergisantes'];
 
@@ -82,8 +82,15 @@ export default function StockComponent() {
       unit: formData.unit,
     };
 
-    // Appel réel à l'API pour créer le produit
-    const result = await createProduct(productData);
+    let result;
+    
+    if (editingProduct) {
+      // Mise à jour d'un produit existant
+      result = await updateProduct(editingProduct.id, productData);
+    } else {
+      // Création d'un nouveau produit
+      result = await createProduct(productData);
+    }
     
     if (result.success) {
       // Recharger les produits depuis le serveur
@@ -92,11 +99,11 @@ export default function StockComponent() {
         setProducts(reloadResult.data);
       }
       
-      toast.success('Produit créé avec succès');
+      toast.success(editingProduct ? 'Produit mis à jour avec succès' : 'Produit créé avec succès');
       resetForm();
       setIsDialogOpen(false);
     } else {
-      toast.error(result.error || 'Erreur lors de la création du produit');
+      toast.error(result.error || `Erreur lors de ${editingProduct ? 'la mise à jour' : 'la création'} du produit`);
     }
   };
 

@@ -1,7 +1,7 @@
 'use server';
 
 import { BASE_URL } from "@/baseurl/baseurl";
-import { createInvoiceSchema, createInvoiceItemSchema, createInvoicePaymentSchema, createInvoiceContactSchema, CreateInvoiceSchema, CreateInvoiceItemSchema, CreateInvoicePaymentSchema, CreateInvoiceContactSchema } from './invoice.schema';
+import { createInvoiceSchema, createInvoiceItemSchema, createInvoicePaymentSchema, createInvoiceContactSchema, updateInvoiceSchema, CreateInvoiceSchema, CreateInvoiceItemSchema, CreateInvoicePaymentSchema, CreateInvoiceContactSchema, UpdateInvoiceSchema } from './invoice.schema';
 import { Invoice, InvoiceItem, InvoicePayment, InvoiceContact } from './invoice.schema';
 
 const origine: string = "Actions Factures";
@@ -113,8 +113,8 @@ export async function getInvoiceById(id: string) {
 }
 
 // UPDATE INVOICE
-export async function updateInvoice(id: string, body: CreateInvoiceSchema) {
-  const parsed = createInvoiceSchema.safeParse(body);
+export async function updateInvoice(id: string, body: UpdateInvoiceSchema) {
+  const parsed = updateInvoiceSchema.safeParse(body);
   if (!parsed.success) {
     return { 
       success: false, 

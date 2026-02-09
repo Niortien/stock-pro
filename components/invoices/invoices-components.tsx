@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { createInvoice, getAllInvoices } from '@/lib/services/invoices/invoice.action';
+import { createInvoice, getAllInvoices, updateInvoice } from '@/lib/services/invoices/invoice.action';
 import { getAllProducts } from '@/lib/services/stock/stock.action';
 
 import { format } from 'date-fns';
@@ -402,15 +402,39 @@ export default function InvoicesComponents() {
     if (!selectedInvoice) return;
     
     try {
-      // Simuler la mise à jour (à adapter avec votre API)
-      setInvoices(invoices.map(inv => 
-        inv.id === selectedInvoice.id 
-          ? { ...inv, clientName: editFormData.clientName, status: editFormData.status }
-          : inv
-      ));
-      toast.success('Facture mise à jour avec succès');
-      setEditDialogOpen(false);
-      setSelectedInvoice(null);
+      // Utiliser les données existantes de la facture et mettre à jour seulement les champs modifiés
+      const invoiceData = {
+        invoiceNumber: selectedInvoice.invoiceNumber,
+        clientName: editFormData.clientName || selectedInvoice.clientName,
+        items: (selectedInvoice.items || []).map((item: any) => ({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total,
+        })),
+        subtotal: selectedInvoice.subtotal || 0,
+        tax: selectedInvoice.tax || 0,
+        total: selectedInvoice.total || 0,
+        date: selectedInvoice.date || new Date().toISOString().split('T')[0],
+        status: editFormData.status as "DRAFT" | "SENT" | "PAID" | "PARTIAL" | "OVERDUE" | "CANCELLED",
+      };
+
+      const result = await updateInvoice(selectedInvoice.id, invoiceData);
+      
+      if (result.success) {
+        // Recharger la liste des factures
+        const invoicesResult = await getAllInvoices();
+        if (invoicesResult.success) {
+          setInvoices(invoicesResult.data);
+        }
+        
+        toast.success('Facture mise à jour avec succès');
+        setEditDialogOpen(false);
+        setSelectedInvoice(null);
+      } else {
+        toast.error(result.error || 'Erreur lors de la mise à jour de la facture');
+      }
     } catch (error) {
       toast.error('Erreur lors de la mise à jour de la facture');
     }

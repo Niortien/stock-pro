@@ -1,1 +1,1 @@
-export const BASE_URL = "http://localhost:8001";
+export const BASE_URL = "https://stock-pro-backend-bd7vqsgvg-niortiens-projects.vercel.app/"

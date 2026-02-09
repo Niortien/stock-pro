@@ -10,8 +10,8 @@ const StockApi = {
   // Produits
   create: { method: "POST", endpoint: () => `${BASE_URL}/products` },
   getAll: { method: "GET", endpoint: () => `${BASE_URL}/products` },
-  getById: { method: "GET", endpoint: (id: string) => `${BASE_URL}/stock/products/${id}` },
-  update: { method: "PATCH", endpoint: (id: string) => `${BASE_URL}/stock/products/${id}` },
+  getById: { method: "GET", endpoint: (id: string) => `${BASE_URL}/products/${id}` },
+  update: { method: "PATCH", endpoint: (id: string) => `${BASE_URL}/products/${id}` },
   delete: { method: "DELETE", endpoint: (id: string) => `${BASE_URL}/products/${id}` },
   
   // Catégories

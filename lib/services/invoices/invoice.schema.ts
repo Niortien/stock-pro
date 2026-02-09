@@ -81,7 +81,26 @@ export const createInvoiceItemSchema = InvoiceItemSchema.omit({ id: true, create
 export const createInvoicePaymentSchema = InvoicePaymentSchema.omit({ id: true, createdAt: true });
 export const createInvoiceContactSchema = InvoiceContactSchema.omit({ id: true, createdAt: true, updatedAt: true });
 
+// Schéma de mise à jour simplifié pour le composant
+export const updateInvoiceSchema = z.object({
+  invoiceNumber: z.string().optional(),
+  clientName: z.string().optional(),
+  items: z.array(z.object({
+    productId: z.string(),
+    productName: z.string(),
+    quantity: z.number(),
+    unitPrice: z.number(),
+    total: z.number(),
+  })).optional(),
+  subtotal: z.number().optional(),
+  tax: z.number().optional(),
+  total: z.number().optional(),
+  date: z.string().optional(),
+  status: z.enum(["DRAFT", "SENT", "PAID", "PARTIAL", "OVERDUE", "CANCELLED"]).optional(),
+});
+
 export type CreateInvoiceSchema = z.infer<typeof createInvoiceSchema>;
 export type CreateInvoiceItemSchema = z.infer<typeof createInvoiceItemSchema>;
 export type CreateInvoicePaymentSchema = z.infer<typeof createInvoicePaymentSchema>;
 export type CreateInvoiceContactSchema = z.infer<typeof createInvoiceContactSchema>;
+export type UpdateInvoiceSchema = z.infer<typeof updateInvoiceSchema>;
