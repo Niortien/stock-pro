@@ -22,11 +22,20 @@ import {
 } from '@/components/ui/select';
 import { createInvoice, getAllInvoices, updateInvoice } from '@/lib/services/invoices/invoice.action';
 import { getAllProducts } from '@/lib/services/stock/stock.action';
-import { InvoiceSchema, InvoiceItem } from '@/lib/services/invoices/invoice.schema';
+import { InvoiceSchema } from '@/lib/services/invoices/invoice.schema';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+
+// Définir le type InvoiceItem localement
+interface InvoiceItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
 
 // Styles pour le PDF avec police système
 const styles = StyleSheet.create({
@@ -55,7 +64,8 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   table: {
-    display: 'table',
+    display: 'flex',
+    flexDirection: 'column',
     width: 'auto',
     marginBottom: 20,
   },

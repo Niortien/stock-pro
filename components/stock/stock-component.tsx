@@ -404,8 +404,6 @@ export default function StockComponent() {
 
         unit: product.unit,
 
-        isActive: false, // Archiver le produit
-
       });
 
       

@@ -30,8 +30,8 @@ export default function RootLayout({
       >
 
         <AppSidebar />
-        <main className="pl-64 min-h-screen bg-gray-50">
-          <div className="p-6">
+        <main className="lg:pl-64 min-h-screen bg-gray-50">
+          <div className="p-4 lg:p-6">
             {children}
           </div>
         </main>
