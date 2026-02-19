@@ -1,10 +1,11 @@
 'use client'
 import { useState, useEffect } from 'react';
-import { Plus, Search, FileText, Download, Eye, Printer, Trash2, Edit } from 'lucide-react';
+import { Plus, Search, TrendingUp, Trash2, Edit, Download, Printer, Eye, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/ui/page-header';
+import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
@@ -12,7 +13,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -22,11 +22,113 @@ import {
 } from '@/components/ui/select';
 import { createInvoice, getAllInvoices, updateInvoice } from '@/lib/services/invoices/invoice.action';
 import { getAllProducts } from '@/lib/services/stock/stock.action';
-
+import { InvoiceSchema, InvoiceItem } from '@/lib/services/invoices/invoice.schema';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { toast } from 'sonner';
-import { Invoice, InvoiceItem } from '@/types/type';
+import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+
+// Styles pour le PDF avec police système
+const styles = StyleSheet.create({
+  page: {
+    flexDirection: 'column',
+    backgroundColor: '#FFFFFF',
+    padding: 30,
+    fontFamily: 'Helvetica',
+  },
+  title: {
+    fontSize: 24,
+    textAlign: 'center',
+    marginBottom: 20,
+    fontWeight: 'bold',
+  },
+  header: {
+    fontSize: 12,
+    marginBottom: 30,
+    textAlign: 'center',
+    color: '#666666',
+  },
+  clientInfo: {
+    marginBottom: 20,
+    padding: 15,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 5,
+  },
+  table: {
+    display: 'table',
+    width: 'auto',
+    marginBottom: 20,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#CCCCCC',
+    borderBottomStyle: 'solid',
+  },
+  tableColHeader: {
+    width: '25%',
+    borderStyle: 'solid',
+    borderWidth: 1,
+    borderColor: '#CCCCCC',
+    backgroundColor: '#F8F9FA',
+    fontWeight: 'bold',
+    padding: 8,
+    fontSize: 10,
+  },
+  tableCol: {
+    width: '25%',
+    borderStyle: 'solid',
+    borderWidth: 1,
+    borderColor: '#CCCCCC',
+    padding: 8,
+    fontSize: 10,
+  },
+  tableColRight: {
+    width: '25%',
+    borderStyle: 'solid',
+    borderWidth: 1,
+    borderColor: '#CCCCCC',
+    padding: 8,
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  totals: {
+    marginTop: 20,
+    textAlign: 'right',
+  },
+  totalRow: {
+    flexDirection: 'row',
+    marginBottom: 5,
+  },
+  totalLabel: {
+    width: '80%',
+    fontSize: 10,
+    textAlign: 'right',
+    paddingRight: 10,
+  },
+  totalValue: {
+    width: '20%',
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  grandTotal: {
+    borderTopWidth: 2,
+    borderTopColor: '#333333',
+    borderTopStyle: 'solid',
+    paddingTop: 10,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 30,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 10,
+    color: '#666666',
+  },
+});
 
 export default function InvoicesComponents() {
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -163,89 +265,86 @@ export default function InvoicesComponents() {
     }
   };
 
-  const downloadInvoice = (invoice: any) => {
-    // Créer le contenu HTML pour le PDF
-    const invoiceContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Facture ${invoice.invoiceNumber}</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
-    .header { text-align: center; margin-bottom: 30px; }
-    .invoice-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
-    .invoice-info { font-size: 14px; color: #666; }
-    .client-info { margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px; }
-    .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-    .items-table th, .items-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-    .items-table th { background: #f8f9fa; font-weight: bold; }
-    .items-table .text-right { text-align: right; }
-    .totals { margin-top: 20px; text-align: right; }
-    .totals div { margin: 5px 0; }
-    .total { font-weight: bold; font-size: 18px; border-top: 2px solid #333; padding-top: 10px; }
-    .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #666; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="invoice-title">FACTURE</div>
-    <div class="invoice-info">
-      N°: ${invoice.invoiceNumber}<br>
-      Date: ${format(new Date(invoice.date || invoice.issueDate), 'dd MMMM yyyy', { locale: fr })}<br>
-    </div>
-  </div>
+  // Composant PDF avec React-PDF
+  const InvoicePDF = ({ invoice }: { invoice: any }) => (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        <View style={styles.title}>
+          <Text>FACTURE</Text>
+        </View>
+        
+        <View style={styles.header}>
+          <Text>N°: {invoice.invoiceNumber}</Text>
+          <Text>Date: {format(new Date(invoice.date || invoice.issueDate), 'dd MMMM yyyy', { locale: fr })}</Text>
+        </View>
 
-  <div class="client-info">
-    <strong>Client:</strong> ${invoice.customerId || invoice.clientName}
-  </div>
+        <View style={styles.clientInfo}>
+          <Text>Client: {invoice.customerId || invoice.clientName}</Text>
+        </View>
 
-  <table class="items-table">
-    <thead>
-      <tr>
-        <th>Article</th>
-        <th class="text-right">Qté</th>
-        <th class="text-right">P.U.</th>
-        <th class="text-right">Total</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${(invoice.items || []).map((item: any) => `
-        <tr>
-          <td>${item.productName}</td>
-          <td class="text-right">${item.quantity}</td>
-          <td class="text-right">${item.unitPrice?.toLocaleString()} FCFA</td>
-          <td class="text-right">${item.total?.toLocaleString()} FCFA</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>
+        <View style={styles.table}>
+          <View style={styles.tableRow}>
+            <Text style={styles.tableColHeader}>Article</Text>
+            <Text style={styles.tableColHeader}>Qté</Text>
+            <Text style={styles.tableColHeader}>P.U.</Text>
+            <Text style={styles.tableColHeader}>Total</Text>
+          </View>
+          
+          {(invoice.items || []).map((item: any, index: number) => (
+            <View key={index} style={styles.tableRow}>
+              <Text style={styles.tableCol}>{item.productName || ''}</Text>
+              <Text style={styles.tableCol}>{item.quantity || ''}</Text>
+              <Text style={styles.tableColRight}>{(item.unitPrice || 0).toLocaleString()} FCFA</Text>
+              <Text style={styles.tableColRight}>{(item.total || 0).toLocaleString()} FCFA</Text>
+            </View>
+          ))}
+        </View>
 
-  <div class="totals">
-    <div>Sous-total: ${(invoice.subtotal || 0).toLocaleString()} FCFA</div>
-    <div>TVA (0%): ${(invoice.tax || 0).toLocaleString()} FCFA</div>
-    <div class="total">TOTAL: ${(invoice.total || invoice.finalAmount || 0).toLocaleString()} FCFA</div>
-  </div>
+        <View style={styles.totals}>
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Sous-total:</Text>
+            <Text style={styles.totalValue}>{(invoice.subtotal || 0).toLocaleString()} FCFA</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>TVA (0%):</Text>
+            <Text style={styles.totalValue}>{(invoice.tax || 0).toLocaleString()} FCFA</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.grandTotal}>TOTAL: {(invoice.total || invoice.finalAmount || 0).toLocaleString()} FCFA</Text>
+          </View>
+        </View>
 
-  <div class="footer">
-    Merci pour votre confiance!
-  </div>
-</body>
-</html>
-    `;
+        <View style={styles.footer}>
+          <Text>Merci pour votre confiance!</Text>
+        </View>
+      </Page>
+    </Document>
+  );
 
-    // Créer un Blob et télécharger le fichier
-    const blob = new Blob([invoiceContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${invoice.invoiceNumber}.html`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const downloadInvoice = async (invoice: any) => {
+    console.log('Tentative de génération PDF avec React-PDF pour facture:', invoice);
     
-    toast.success('Facture téléchargée avec succès');
+    try {
+      const { pdf } = await import('@react-pdf/renderer');
+      
+      const blob = await pdf(<InvoicePDF invoice={invoice} />).toBlob();
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `facture_${invoice.invoiceNumber}.pdf`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      console.log('PDF généré avec succès');
+      toast.success('PDF téléchargé avec succès');
+    } catch (error: any) {
+      console.error('Erreur React-PDF:', error);
+      toast.error(`Erreur lors de la génération du PDF: ${error?.message || error}`);
+    }
   };
 
   const printInvoice = (invoice: any) => {
